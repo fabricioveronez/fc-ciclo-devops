@@ -7,17 +7,11 @@ on:
     paths:
       - 'src/**'
       - 'k8s/**'
-      
+env:
+  docker_image_name: fabricioveronez/kube-news:${{github.run_number}}
 jobs:
   CI:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      security-events: write
-      actions: read
-
     steps:
     - name: Obtendo o código
       uses: actions/checkout@v3
@@ -31,29 +25,10 @@ jobs:
       with: 
         context: ./src
         file: ./src/Dockerfile
-        push: false
+        push: true
         tags: |
-          fabricioveronez/kube-news:${{github.run_number}}
-          fabricioveronez/kube-news:latest                
-
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@0.16.1
-      with:
-        image-ref: fabricioveronez/kube-news:${{github.run_number}}
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        exit-code: 0
-        severity: UNKNOWN,CRITICAL,HIGH,MEDIUM,LOW
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: 'trivy-results.sarif'
-
-    - name: Enviando a imagem
-      run: |
-        docker push fabricioveronez/kube-news:${{github.run_number}}
-        docker push fabricioveronez/kube-news:latest
+          ${{ env.docker_image_name }}
+          fabricioveronez/kube-news:latest
   CD:
     runs-on: ubuntu-latest
     needs: [CI]
@@ -64,17 +39,17 @@ jobs:
     - uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
-    - uses: azure/aks-set-context@v3
+    - uses: azure/k8s-set-context@v4
       with:
-          resource-group: aula-rg
-          cluster-name: aula-aks
+        method: kubeconfig
+        kubeconfig: ${{ secrets.K8S_CONFIG }}
     - name: Deploy to Kubernetes cluster
       uses: Azure/k8s-deploy@v4.9
       with:
         manifests: |
           ./k8s/deployment.yaml
         images: |
-          fabricioveronez/kube-news:${{github.run_number}}
+          ${{ env.docker_image_name }}
 
 
 
